@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+}
+enum Role {
+  REQUESTER
+  APPROVER
+  OPERATOR
+  PLATFORM_ADMIN
+  AUDITOR
+}
+enum Environment {
+  DEV
+  TEST
+  PRODUCTION
+}
+enum Action {
+  POWER_ON_VM
+  RESTART_VM
+  CREATE_VM
+}
+enum RequestStatus {
+  DRAFT
+  AWAITING_APPROVAL
+  APPROVED
+  SCHEDULED
+  QUEUED
+  RUNNING
+  VERIFYING
+  SUCCEEDED
+  COMPLETED_NOOP
+  REJECTED
+  CANCELLED
+  EXPIRED
+  FAILED
+  REQUIRES_REVIEW
+}
+enum DispatchPhase {
+  NOT_DISPATCHED
+  DISPATCHING
+  DISPATCHED
+}
+enum Decision {
+  APPROVE
+  REJECT
+}
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+  SUPERSEDED
+}
+model Team {
+  id String @id
+  name String
+  assignments RoleAssignment[]
+  resources Resource[]
+  requests Request[]
+}
+model User {
+  id String @id @default(uuid())
+  email String @unique
+  name String
+  passwordHash String
+  active Boolean @default(true)
+  assignments RoleAssignment[]
+  sessions Session[]
+  requests Request[]
+  approvals Approval[]
+  audit AuditEvent[]
+}
+model RoleAssignment {
+  id String @id @default(uuid())
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  teamId String
+  team Team @relation(fields: [teamId], references: [id])
+  role Role
+  environments Environment[]
+  @@unique([userId, teamId, role])
+}
+model Session {
+  id String @id
+  userId String
+  user User @relation(fields: [userId], references: [id])
+  csrfToken String
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@index([expiresAt])
+}
+model Resource {
+  id String @id @default(uuid())
+  externalId String
+  adapterId String @default("demo")
+  name String
+  teamId String
+  team Team @relation(fields: [teamId], references: [id])
+  owner String
+  environment Environment
+  cpu Int
+  ramGb Int
+  diskGb Int
+  networkId String
+  network NetworkProfile @relation(fields: [networkId], references: [id])
+  templateId String?
+  template Template? @relation(fields: [templateId], references: [id])
+  powerState String @default("poweredOff")
+  guestState String @default("stopped")
+  bootMarker String?
+  serviceHealthy Boolean @default(false)
+  guestRebootSupported Boolean @default(true)
+  healthRequired Boolean @default(true)
+  scenario String @default("NORMAL")
+  mutationCount Int @default(0)
+  observedAt DateTime @db.Timestamptz(3) @default(now())
+  requests Request[]
+  @@unique([adapterId, externalId])
+  @@unique([adapterId, name])
+  @@index([teamId, environment])
+}
+model ServiceDefinition {
+  action Action @id
+  name String
+  description String
+  enabled Boolean @default(false)
+  version Int @default(1)
+  schema Json
+  verifierContract Json
+}
+model Template {
+  id String @id
+  name String
+  os String
+  enabled Boolean @default(true)
+  resources Resource[]
+}
+model SizeProfile {
+  id String @id
+  name String
+  cpu Int
+  ramGb Int
+  diskGb Int
+}
+model NetworkProfile {
+  id String @id
+  name String
+  cidr String
+  teamId String
+  resources Resource[]
+}
+model Request {
+  id String @id @default(uuid())
+  requesterId String
+  requester User @relation(fields: [requesterId], references: [id])
+  teamId String
+  team Team @relation(fields: [teamId], references: [id])
+  environment Environment
+  action Action
+  resourceId String?
+  resource Resource? @relation(fields: [resourceId], references: [id])
+  reason String
+  parameters Json
+  scheduledAt DateTime? @db.Timestamptz(3)
+  status RequestStatus @default(DRAFT)
+  version Int @default(1)
+  snapshot Json?
+  snapshotHash String?
+  precheck Json?
+  source String @default("PORTAL")
+  sourceRevision String?
+  parentRequestId String?
+  idempotencyKey String @unique
+  payloadHash String
+  correlationId String @unique @default(uuid())
+  ticketId String? @unique
+  ticket ExternalTicket? @relation(fields: [ticketId], references: [id])
+  approvals Approval[]
+  runs ExecutionRun[]
+  audit AuditEvent[]
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  updatedAt DateTime @db.Timestamptz(3) @updatedAt
+  @@index([teamId, environment, status, createdAt])
+}
+model Approval {
+  id String @id @default(uuid())
+  requestId String
+  request Request @relation(fields: [requestId], references: [id])
+  requestVersion Int
+  snapshotHash String
+  actorId String
+  actor User @relation(fields: [actorId], references: [id])
+  decision Decision
+  reason String
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@unique([requestId, requestVersion])
+}
+model ExecutionRun {
+  id String @id @default(uuid())
+  requestId String @unique
+  request Request @relation(fields: [requestId], references: [id])
+  attempt Int @default(1)
+  status RequestStatus @default(QUEUED)
+  dispatchPhase DispatchPhase @default(NOT_DISPATCHED)
+  externalOperationId String? @unique
+  leaseOwner String?
+  leaseExpiresAt DateTime? @db.Timestamptz(3)
+  availableAt DateTime @db.Timestamptz(3) @default(now())
+  startedAt DateTime? @db.Timestamptz(3)
+  finishedAt DateTime? @db.Timestamptz(3)
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  events RunEvent[]
+  evidence Evidence[]
+  lock ResourceLock?
+  @@index([status, availableAt, leaseExpiresAt])
+}
+model ResourceLock {
+  key String @id
+  runId String @unique
+  run ExecutionRun @relation(fields: [runId], references: [id])
+  acquiredAt DateTime @db.Timestamptz(3) @default(now())
+}
+model RunEvent {
+  id String @id @default(uuid())
+  runId String
+  run ExecutionRun @relation(fields: [runId], references: [id])
+  kind String
+  message String
+  payload Json
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@index([runId, createdAt])
+}
+model Evidence {
+  id String @id @default(uuid())
+  runId String
+  run ExecutionRun @relation(fields: [runId], references: [id])
+  mode String @default("DEMO")
+  outcome String
+  verified Boolean
+  precheck Json
+  postcheck Json
+  correlationId String
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+}
+model ExternalTicket {
+  id String @id @default(uuid())
+  provider String
+  externalId String
+  revision String
+  teamId String
+  environment Environment
+  approvalSource String @default("PORTAL")
+  syncStatus SyncStatus @default(PENDING)
+  syncAttempts Int @default(0)
+  simulateSyncFailure Boolean @default(false)
+  result Json?
+  request Request?
+  events InboxEvent[]
+  outbox OutboxEvent[]
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@unique([provider, externalId])
+  @@index([teamId, environment])
+}
+model InboxEvent {
+  id String @id @default(uuid())
+  provider String
+  eventId String
+  revision String
+  payloadHash String
+  ticketId String
+  ticket ExternalTicket @relation(fields: [ticketId], references: [id])
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@unique([provider, eventId])
+}
+model OutboxEvent {
+  id String @id @default(uuid())
+  ticketId String
+  ticket ExternalTicket @relation(fields: [ticketId], references: [id])
+  dedupeKey String @unique
+  status SyncStatus @default(PENDING)
+  attempts Int @default(0)
+  payload Json
+  availableAt DateTime @db.Timestamptz(3) @default(now())
+  lastError String?
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@index([status, availableAt])
+}
+model AuditEvent {
+  id String @id @default(uuid())
+  actorId String?
+  actor User? @relation(fields: [actorId], references: [id])
+  teamId String
+  environment Environment
+  action String
+  requestId String?
+  request Request? @relation(fields: [requestId], references: [id])
+  runId String?
+  correlationId String
+  source String
+  details Json
+  createdAt DateTime @db.Timestamptz(3) @default(now())
+  @@index([teamId, environment, createdAt])
+}

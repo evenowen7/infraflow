@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: infraflow
+      POSTGRES_USER: infraflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U infraflow -d infraflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: {context: ., target: server}
+    environment: &server_env
+      DATABASE_URL: postgresql://infraflow:${POSTGRES_PASSWORD}@db:5432/infraflow
+      APP_MODE: DEMO
+      APP_ORIGIN: http://localhost:8080
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:?Set WEBHOOK_SECRET}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:?Set DEMO_PASSWORD}
+      API_HOST: 0.0.0.0
+      PORT: 3001
+      APPROVAL_TTL_MINUTES: 1440
+    command: [sh, -c, "npx prisma migrate deploy && npx tsx prisma/seed.ts"]
+    depends_on:
+      db: {condition: service_healthy}
+  api:
+    build: {context: ., target: server}
+    environment: *server_env
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  worker:
+    build: {context: ., target: server}
+    environment: *server_env
+    command: [node, dist/apps/worker/src/index.js]
+    depends_on:
+      api: {condition: service_healthy}
+  web:
+    build: {context: ., target: web}
+    ports: ["127.0.0.1:8080:80"]
+    depends_on:
+      api: {condition: service_healthy}
+volumes:
+  postgres_data:

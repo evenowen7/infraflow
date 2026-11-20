@@ -1,0 +1,17 @@
+# Catatan pengembangan dengan Qoder
+
+Tanggal: 19 November 2026. Sumber kebutuhan: `InfraFlow_BRD.md` dan `InfraFlow_Qoder_Prompt.md` yang diberikan pengguna. Workspace awal kosong.
+
+Qoder membaca kedua dokumen, menyiapkan npm workspaces, schema/migrasi/seed Prisma, PostgreSQL lokal terisolasi, serta service API dan worker. Arsitektur dibangun sebagai vertical slice power on sebelum perluasan action. Pekerjaan frontend dan pengujian guard didelegasikan ke agent terpisah dengan kontrak API dan batas file yang eksplisit; hasil tetap diperiksa di workspace dan melalui pengujian.
+
+Implementasi sesi mencakup session/RBAC backend, canonical snapshot, approval expiry, state transitions, durable queue, resource locks, demo adapter, verifier, evidence export, dan audit. React frontend menggunakan API, bukan mock dashboard. Tidak dipasang API model runtime dan tidak diminta akses perusahaan.
+
+Masalah lingkungan yang benar-benar ditemui: locale PostgreSQL Homebrew menyebabkan startup gagal; menjalankan cluster dengan `LC_ALL=C` memperbaikinya. Audit npm awal menemukan advisory pada dependensi awal; Prisma, Zod, dan Vitest diperbarui ke versi patched dan audit ulang pada tahap fondasi melaporkan nol vulnerability. Docker tidak tersedia sehingga runtime diuji dengan PostgreSQL lokal.
+
+Checkpoint pertama yang benar-benar dijalankan: requester membuat dan submit power on melalui API, akun approver berbeda menyetujui, worker persisten mengubah VM demo dari poweredOff ke poweredOn tepat satu kali, verifier lulus, dan evidence JSON berlabel DEMO tersimpan. Migration dan seed juga dijalankan ulang tanpa menghapus hasil. Pengujian menemukan dua bug timezone: job terjadwal diambil dini dan lease aktif dianggap kedaluwarsa. Migrasi TIMESTAMPTZ serta timezone koneksi UTC memperbaikinya. Setelah itu 52 pengujian power on lulus; Playwright Chromium juga menyelesaikan request, approval, mutasi, no-op, export, dan navigasi mobile sebelum action lain ditambahkan. Browser bawaan tidak memiliki viewport aktif, sehingga pengujian UI memakai Chromium Playwright.
+
+Setelah gate power on lulus, action restart/create ditambahkan dengan kontrak verifier khusus, katalog immutable, quota/name locking, dan linkage resource. Review utama kemudian menutup lock create menjadi resource lock, outbox review terlambat yang dapat menimpa hasil rekonsiliasi, clone create yang memakai nama lama, serta redaksi rationale pada response mutasi. Regression tests ditambahkan, termasuk pemulihan intent worker melalui dua proses Node yang berbeda.
+
+Simulator tiket dikembangkan dan diuji terhadap signature/replay window, revision conflict, approval portal, scope operator, dan retry outbox tanpa mutasi ulang. UI diperluas dan diperiksa melalui Playwright: create → restart → clone/cancel, replay event dengan field UI yang diubah, sync failure/retry, verifier failure, rekonsiliasi, serta regresi power on/no-op/mobile. Screenshot diambil dari browser yang menjalankan aplikasi dan dibaca untuk inspeksi visual.
+
+Checks akhir 19 November 2026: 118 integrasi lulus, 5 E2E Chromium lulus, lint/typecheck/build lulus, audit npm nol vulnerability. Metodologi, hasil performa lokal, dan batasan pengujian dicatat di `test-results.md`. Tidak ada angka penghematan waktu, produktivitas, baseline perusahaan, screenshot, atau hasil integrasi connected yang direkayasa. Tidak dilakukan deployment publik atau submission challenge.
