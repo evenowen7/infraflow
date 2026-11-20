@@ -18,7 +18,10 @@
     "test:e2e": "playwright test",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "build:vercel": "node scripts/build-vercel.mjs",
+    "db:seed:hosted": "tsx prisma/seed.ts",
+    "test:hosted-config": "node --import tsx --test tests/hosted-config.unit.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

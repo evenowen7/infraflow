@@ -50,7 +50,8 @@ export const json = (value: unknown) => JSON.parse(JSON.stringify(sanitize(value
 export function validateConfig() {
   ensure(process.env.APP_MODE === 'DEMO' || process.env.APP_MODE === 'CONNECTED', 500, 'CONFIGURATION', 'APP_MODE wajib DEMO atau CONNECTED');
   ensure((process.env.SESSION_SECRET?.length ?? 0) >= 32 && !process.env.SESSION_SECRET?.startsWith('replace-'), 500, 'CONFIGURATION', 'SESSION_SECRET tidak layak');
-  ensure(!(process.env.NODE_ENV === 'production' && process.env.APP_MODE === 'DEMO'), 503, 'DEMO_PRODUCTION_DENIED', 'Mode DEMO tidak diizinkan sebagai deployment production');
+  const hostedDemo = process.env.ALLOW_HOSTED_DEMO === 'true';
+  ensure(!(process.env.NODE_ENV === 'production' && process.env.APP_MODE === 'DEMO' && !hostedDemo), 503, 'DEMO_PRODUCTION_DENIED', 'Mode DEMO tidak diizinkan sebagai deployment production');
   if (process.env.APP_MODE === 'CONNECTED' || process.env.NODE_ENV === 'production') {
     ensure(!process.env.DEMO_PASSWORD && !process.env.SESSION_SECRET!.includes('demo') && process.env.APP_ORIGIN?.startsWith('https://'), 500, 'CONFIGURATION', 'Deployment production memerlukan HTTPS, secret kuat, dan tanpa credential demo');
   }

@@ -1,5 +1,13 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["apps/api/**/*.ts", "apps/worker/**/*.ts", "packages/**/*.ts"],
-  "exclude": ["tests", "apps/web"]
+  "include": [
+    "apps/api/**/*.ts",
+    "apps/worker/**/*.ts",
+    "packages/**/*.ts",
+    "api/**/*.ts"
+  ],
+  "exclude": [
+    "tests",
+    "apps/web"
+  ]
 }
